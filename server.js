@@ -1,45 +1,50 @@
-const request = require("request");
 const express = require("express");
+const Mailjet = require("node-mailjet");
+const dotenv = require("dotenv");
 const cors = require("cors");
-const bodyParser = require("body-parser");
+
+dotenv.config();
+
 const app = express();
+app.use(express.json());
+app.use(cors());
 const port = 3001;
 
-app.use(cors());
-app.use(bodyParser.json());
+const mailjetClient = Mailjet.apiConnect(
+  process.env.MAILJET_API_KEY,
+  process.env.MAILJET_SECRET_KEY
+);
 
-app.post("/subscribe", (req, res) => {
-  const { email } = req.body;
+app.post("/api/subscribe", async (req, res) => {
+  try {
+    const { email } = req.body;
+    const listId = "331297";
 
-  if (!email) {
-    return res.status(400).send({ error: "Email is required" });
-  }
-
-  const options = {
-    url: "https://api.mailjet.com/v3/REST/contactslist/331297/managecontact",
-    method: "POST",
-    headers: {
-      Authorization:
-        "Basic " +
-        Buffer.from(
-          `${process.env.MAILJET_PUBLIC_KEY}:${process.env.MAILJET_SECRET_KEY}`
-        ).toString("base64"),
-      "Content-Type": "application/json",
-    },
-    json: {
-      Email: email,
-      Action: "addnoforce",
-    },
-  };
-
-  request(options, (error, response, body) => {
-    if (error) {
-      return res.status(500).send(error);
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
     }
-    res.status(response.statusCode).send(body);
-  });
+
+    const subscribeRequest = {
+      Email: email,
+      Action: "addforce", 
+    };
+
+    const result = await mailjetClient
+      .post(`contactslist/${listId}/managecontact`, { version: "v3" })
+      .request(subscribeRequest);
+
+    res
+      .status(200)
+      .json({ message: "Email subscribed successfully!", data: result.body });
+  } catch (error) {
+    console.error(
+      "Error subscribing email:",
+      error.response ? error.response.body : error
+    );
+    res
+      .status(500)
+      .json({ message: "Failed to subscribe email.", error: error.message });
+  }
 });
 
-app.listen(port, () => {
-  console.log(`Proxy server listening at http://localhost:${port}`);
-});
+app.listen(port, () => console.log(`Server running on port ${port}`));
